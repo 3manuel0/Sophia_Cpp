@@ -73,6 +73,7 @@ int main() {
   char a[4];
   dpp::snowflake channel_id;
   dpp::snowflake user_id;
+  int timer = 0;
 
   bot.on_log(dpp::utility::cout_logger());
 
@@ -87,7 +88,6 @@ int main() {
 
     if (event.command.get_command_name() == "game") {
       if (to_answer.empty()) {
-        channel_id = event.command.channel_id;
         user_id = event.command.get_issuing_user().id;
         for (int i = 0; i < 4; i++) {
           char temp = dist(gen);
@@ -100,60 +100,105 @@ int main() {
         for (char i : a)
           s += std::to_string(i);
 
-        event.reply("A 4 digit number was generated\ne: means existing digit."
-                    "(but not in it's place).\np: means a digit is in it's "
-                    "place\ne and p are a total.\nyou have 120 seconds "
-                    "(2mins) to find the number.");
-
+        // event.reply("A 4 digit number was generated\ne: means existing
+        // digit."
+        //             "(but not in it's place).\np: means a digit is in it's "
+        //             "place\ne and p are a total.\nyou have 120 seconds "
+        //             "(2mins) to find the number.");
+        if (event.command.channel_id == CHANNEL_ID) {
+          event.reply(dpp::message(
+              "<@" + std::to_string(user_id) +
+              ">\nA 4 digit number was generated\ne: means existing "
+              "digit."
+              "(but not in it's place).\np: means a digit is in it's "
+              "place\ne and p are a total.\nyou have 120 seconds "
+              "(2mins) to find the number."));
+        } else {
+          event.reply("Check <#" + std::to_string(CHANNEL_ID) + ">");
+          bot.message_create(dpp::message(
+              CHANNEL_ID,
+              "<@" + std::to_string(user_id) +
+                  ">\nA 4 digit number was generated\ne: means existing "
+                  "digit."
+                  "(but not in it's place).\np: means a digit is in it's "
+                  "place\ne and p are a total."));
+        }
         to_answer[event.command.get_issuing_user().id] = true;
 
         std::thread([&]() {
-          for (int i = 0; i < 120 * 4; i++) {
-            if (to_answer.empty())
+          for (; timer < 120 * 4; timer++) {
+            if (to_answer.empty()) {
+              timer = 0;
               return;
-            // std::cout << "millisec: " << i << std::endl;
+            }
+            std::cout << "sec: " << static_cast<float>(timer) / 4 << std::endl;
             std::this_thread::sleep_for(
                 std::chrono::milliseconds(250)); // wait one second
           }
           to_answer.clear();
-          bot.message_create(
-              dpp::message(channel_id, "<@" + std::to_string(user_id) + ">" +
-                                           " Game Over; 2 mins have passed."));
+          bot.message_create(dpp::message(
+              CHANNEL_ID,
+              "<@" + std::to_string(user_id) + ">" +
+                  " Game Over; 2 mins have passed without any reply"));
+          timer = 0;
         }).detach();
 
       } else {
         auto it = to_answer.begin();
         auto id = it->first;
-        std::string s = "<@" + std::to_string(id) +
-                        "> is using the bot rn, waiting for timout...";
+        std::string s =
+            "<@" + std::to_string(id) +
+            "> is using the bot rn, waiting for the game to end or timout";
         event.reply(s);
       }
     }
   });
 
   bot.on_message_create([&](const dpp::message_create_t &event) {
-    if (to_answer.count(event.msg.author.id)) {
-      std::string reply = event.msg.content;
-      if (reply == "stop") {
-        event.reply("Game over");
-        to_answer.erase(event.msg.author.id);
-      } else if (reply.length() != 4 || !isNumber(reply)) {
-        event.reply("must be 4 digit number :rage:");
-      } else if (!isNotRepeated(reply)) {
-        event.reply("must not repeat numbers :rage:");
-      } else {
-        std::string s = "";
-        for (int i = 0; i < 4; i++)
-          s += std::to_string(a[i]);
-        if (s == reply) {
+    if (event.msg.channel_id == CHANNEL_ID) {
+      if (to_answer.count(event.msg.author.id)) {
+        timer = 0;
+        std::string reply = event.msg.content;
+        if (reply == "stop") {
+          bot.message_create(
+              dpp::message(CHANNEL_ID, "<@" + std::to_string(user_id) +
+                                           ">"
+                                           " Game over"));
+          // event.reply("Game over");
           to_answer.erase(event.msg.author.id);
-          event.reply("congrats you won");
+        } else if (reply.length() != 4 || !isNumber(reply)) {
+          // event.reply("must be 4 digit number :rage:");
+          timer = 0;
+          bot.message_create(
+              dpp::message(CHANNEL_ID, "<@" + std::to_string(user_id) +
+                                           ">"
+                                           " must be 4 digit number :rage:"));
+        } else if (!isNotRepeated(reply)) {
+          // event.reply("must not repeat numbers :rage:");
+          bot.message_create(
+              dpp::message(CHANNEL_ID, "<@" + std::to_string(user_id) +
+                                           ">"
+                                           " must not repeat numbers :rage:"));
         } else {
-          std::string answer = strAnswer(reply, s);
-          event.reply(answer);
+          std::string s = "";
+          for (int i = 0; i < 4; i++)
+            s += std::to_string(a[i]);
+          if (s == reply) {
+            to_answer.erase(event.msg.author.id);
+            // event.reply("congrats you won");
+            bot.message_create(
+                dpp::message(CHANNEL_ID, "<@" + std::to_string(user_id) +
+                                             "> congrats you won"));
+          } else {
+            std::string answer = strAnswer(reply, s);
+            // event.reply(answer);
+            bot.message_create(
+                dpp::message(CHANNEL_ID, "<@" + std::to_string(user_id) +
+                                             ">\n" + reply + " " + answer));
+          }
         }
+        // to_answer.erase(event.msg.author.id);
       }
-      // to_answer.erase(event.msg.author.id);
     }
   });
 
