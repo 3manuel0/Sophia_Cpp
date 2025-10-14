@@ -1,6 +1,9 @@
+// has token and other things
 #include "details.hpp"
+
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <dpp/dpp.h>
 #include <random>
 #include <string>
@@ -59,20 +62,23 @@ std::string strAnswer(std::string &reply, std::string &s) {
 }
 
 int main() {
-  // const char *BOT_TOKEN = std::getenv("BOT_TOKEN");
-  // if (!BOT_TOKEN) {
-  //   std::cerr << "BOT_TOKEN missing from .env file!\n";
-  //   return 1;
-  // }
+  // for grabbing the token from env
+  //  const char *BOT_TOKEN = std::getenv("BOT_TOKEN");
+  //  if (!BOT_TOKEN) {
+  //    std::cerr << "BOT_TOKEN missing from .env file!\n";
+  //    return 1;
+  //  }
   dpp::cluster bot(BOT_TOKEN, dpp::i_default_intents | dpp::i_message_content);
   std::unordered_map<dpp::snowflake, bool> to_answer;
   char a[4];
+  dpp::snowflake channel_id;
+  dpp::snowflake user_id;
 
   bot.on_log(dpp::utility::cout_logger());
 
-  bot.on_slashcommand([&to_answer, &a](const dpp::slashcommand_t &event) {
+  bot.on_slashcommand([&](const dpp::slashcommand_t &event) {
     if (event.command.get_command_name() == "info") {
-      event.reply("3manuel's Bot!");
+      event.reply("3manuel's Bot!\nOnly \"/game\" for now — give it a try!");
     }
 
     std::random_device rd;
@@ -80,9 +86,9 @@ int main() {
     std::uniform_int_distribution<> dist(0, 9);
 
     if (event.command.get_command_name() == "game") {
-
       if (to_answer.empty()) {
-
+        channel_id = event.command.channel_id;
+        user_id = event.command.get_issuing_user().id;
         for (int i = 0; i < 4; i++) {
           char temp = dist(gen);
           while (std::find(a, a + i + 1, temp) != a + i + 1) {
@@ -96,14 +102,30 @@ int main() {
 
         event.reply("A 4 digit number was generated\ne: means existing digit."
                     "(but not in it's place).\np: means a digit is in it's "
-                    "place\ne and p are a total.");
+                    "place\ne and p are a total.\nyou have 120 seconds "
+                    "(2mins) to find the number.");
 
         to_answer[event.command.get_issuing_user().id] = true;
+
+        std::thread([&]() {
+          for (int i = 0; i < 120 * 4; i++) {
+            if (to_answer.empty())
+              return;
+            // std::cout << "millisec: " << i << std::endl;
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(250)); // wait one second
+          }
+          to_answer.clear();
+          bot.message_create(
+              dpp::message(channel_id, "<@" + std::to_string(user_id) + ">" +
+                                           " Game Over; 2 mins have passed."));
+        }).detach();
 
       } else {
         auto it = to_answer.begin();
         auto id = it->first;
-        std::string s = "<@" + std::to_string(id) + "> is using the bot rn";
+        std::string s = "<@" + std::to_string(id) +
+                        "> is using the bot rn, waiting for timout...";
         event.reply(s);
       }
     }
