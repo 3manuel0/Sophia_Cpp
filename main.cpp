@@ -262,9 +262,8 @@ std::vector<unsigned char> to_ascii(std::string url, unsigned int value) {
     int new_w = image.x / value;
     stbi_uc *scaled = scale_down(greyscaled, image.x, image.y, new_w, new_h);
     int pix_long = 0;
-
     for (int i = 0; i < (new_w * new_h); i++) {
-      if (pix_long == new_w) {
+      if (pix_long == new_w - 1) {
         out.push_back('\n');
         pix_long = 0;
       } else {
